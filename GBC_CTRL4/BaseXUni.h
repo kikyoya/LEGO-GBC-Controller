@@ -41,7 +41,7 @@ class BASE_X : public I2C_Device  // I2CDeviceを継承して独自のクラス�
 {
     public:
         // デバイスの設定のため、コンストラクタを追加
-        BASE_X(std::uint8_t i2c_addr = BASE_X_ADDR, std::uint32_t freq = 400000, I2C_Class* i2c = &In_I2C)
+        BASE_X(std::uint8_t i2c_addr = BASE_X_ADDR, std::uint32_t freq = 400000, m5::I2C_Class* i2c = &In_I2C)
           : I2C_Device ( i2c_addr, freq, i2c )
           {}  // 以下変更なし
 

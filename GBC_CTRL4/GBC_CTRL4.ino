@@ -2,6 +2,7 @@
 // 2023/01/05 M5Unified対応, 表示座標の調整
 // 2023/10/20 起動時にすべて接続状態にする
 // 2023/11/25 緊急停止ボタン、起動時誤動作防止追加
+// 2024/12/18 PbHubライブラリの更新
 
 #include <M5Unified.h>  // M5Unified version
 const lgfx::v1::IFont* FontJP=&fonts::lgfxJapanGothic_24; // 日本語フォント
@@ -9,14 +10,14 @@ const lgfx::v1::IFont* FontJP=&fonts::lgfxJapanGothic_24; // 日本語フォン�
 const lgfx::v1::IFont* Font16F=&fonts::AsciiFont8x16;  // 16dot等幅フォント
 int Lcd_w=0, Lcd_h=0;   // LCD画面の幅と高さ
 
-#include "PbHub.h"
-PortHub porthub;
-uint8_t HUB_ADDR[6] = {HUB1_ADDR, HUB2_ADDR, HUB3_ADDR,
-                       HUB4_ADDR, HUB5_ADDR, HUB6_ADDR};
+#include "M5UnitPbHub.h"
+M5UnitPbHub pbhub;
+
 #include "batIcon.h"  // バッテリーアイコン画像
-/*
-  createBtIcon();   // バッテリーアイコン用スプライト作成
+/* Coreはバッテリーの有無を検出できず、無しでも100%充電中と判別される
+  createBtIcon();   // 初期化：バッテリーアイコン用スプライト作成
   void pushBtIcon(int x,int y,Color bg=BLUE); // バッテリー情報を読み出しアイコンを書き出し
+  M5.Lcd.printf("%d",M5.Power.getBatteryVoltage());   // バッテリー電圧
 */
 #include "BaseXUni.h"
 BASE_X base_x = BASE_X();
@@ -24,8 +25,8 @@ BASE_X base_x = BASE_X();
 void setup()
 {
   M5.begin();
-  M5.Power.begin();           // 不要かもしれないが入れて様子をみる
-  porthub.begin();
+// pbHubの初期化 Coreなら何も指定せずともよいがCore2はアドレスが違うので要指定
+  pbhub.begin(&Wire, UNIT_PBHUB_I2C_ADDR, M5.Ex_I2C.getSDA(), M5.Ex_I2C.getSCL());  
 // 液晶ディスプレイの設定
   M5.Lcd.setRotation(1);      // LCDの向き(0-3)
   Lcd_w=M5.Display.width(); Lcd_h=M5.Display.height();    // 画面の大きさ
@@ -42,7 +43,6 @@ void setup()
   M5.Lcd.setCursor(0, 0);
   M5.Lcd.setTextColor(YELLOW,BLUE);// 文字の色,文字背景の色
   M5.Lcd.printf("GBCコントローラー");
-//  M5.Lcd.printf("%d",M5.Power.getBatteryVoltage());   // バッテリー電圧
   M5.Lcd.setCursor(5,30);
   M5.Lcd.setTextColor(WHITE,BLUE);  // 色を元に戻す
   M5.Lcd.printf("Motor| M1 | M2 | M3 | M4");  // 見出し
@@ -54,8 +54,8 @@ void setup()
   }
 // スライダーの初期設定
   for(uint8_t i = 0; i < 4; i++){
-    porthub.hub_wire_setBrightness(HUB_ADDR[i], 20);
-//    porthub.hub_wire_index_color(HUB_ADDR[i],3,0,50,0); // 位置は変えられない(PbHubのバグ)
+    pbhub.setLEDBrightness(i, 20);
+//    pbhub.setLEDColor(i,3,0x003000); // 位置は変えられない(PbHubのバグ) ch,num,RGB
   }
 }
 
@@ -64,19 +64,19 @@ void loop(){
   static bool onoff[4]={true,true,true,true}; // 接続中か？
   static bool onStart[4]={true,true,true,true};  // 起動時や緊急停止復帰後に突然動き出すのを防止するためチェックする
 // バッテリー状態の確認
-/*
+//
   pushBtIcon(Lcd_w-40, 6);
   int bt = M5.Power.getBatteryLevel();   // バッテリーレベルのみ取得可(0,25,50,75,100%)
 	M5.Lcd.setCursor(Lcd_w-40-8*5,6,Font16F);				// 最上行を指定
   M5.Lcd.setTextColor(BLUE,WHITE);
   M5.Lcd.printf("%3d%%",bt);
-*/
+//
   M5.Lcd.setTextColor(WHITE,BLUE);
 // スピードの制御
   M5.Lcd.setCursor(5,60,FontJP);
   M5.Lcd.printf("Speed");
   for(int i = 0; i < 4; i++){
-    int adcValue = porthub.hub_a_read_value(HUB_ADDR[i]);
+    int adcValue = pbhub.analogRead(i);
 // 中央付近は幅広く0にするための処理
     int8_t spd = 0;   // 0-4095 => -127-0-127, 中心付近は0にしてセンターをとる（補正）
 //    if(adcValue<1778) spd = adcValue/14 - 127;  // 0-1778 => -127-0
@@ -88,26 +88,26 @@ void loop(){
     M5.Lcd.printf("|");
     if(onoff[i]){   // 接続中ならモーターON、LED ON
       M5.Lcd.setTextColor(BLUE,WHITE); // 接続中は反転
-      porthub.hub_wire_index_color(HUB_ADDR[i],3,0,50,0); // 緑
+      pbhub.setLEDColor(i,3,0x003000); // 緑
       if(onStart[i]){  // 起動直後or緊急停止中
         M5.Lcd.setTextColor(RED,WHITE); // 赤文字
-        porthub.hub_wire_index_color(HUB_ADDR[i],3,25,5,0); // ほんのり赤
+        pbhub.setLEDColor(i,3,0x100500); // ほんのり赤
       }else{
         base_x.SetMotorSpeed(i+1, spd);
       }
     }else{
       base_x.SetMotorSpeed(i+1, 0);
-      porthub.hub_wire_index_color(HUB_ADDR[i],3,0,0,25); // ほんのり青
+      pbhub.setLEDColor(i,3,0x000020); // ほんのり青
     }
     M5.Lcd.printf("%4d",spd);//base_x.GetMotorSpeed(i+1));
     M5.Lcd.setTextColor(WHITE,BLUE);  // 色を元に戻す
   }
 // 起動時誤動作警告＆緊急停止処理(赤ボタン)
-  if(!porthub.hub_d_read_value_B(HUB_ADDR[4])){   // 緊急停止
+  if(!pbhub.digitalRead(4,1)){   // 緊急停止
     for(int i = 0; i < 4; i++){
       onStart[i]=true;
       base_x.SetMotorSpeed(i+1, 0);
-      porthub.hub_wire_index_color(HUB_ADDR[i],3,50,0,0);
+      pbhub.setLEDColor(i,3,0x300000);
     }
     M5.Lcd.setCursor(20,120);
     M5.Lcd.setTextColor(RED,WHITE);  // 警告色
@@ -128,8 +128,8 @@ void loop(){
     M5.Lcd.printf(" %2s  ",(sel==i)?"↑":"　");
 // 本体ボタンと青ボタンの処理
   M5.update();
-  if(M5.BtnB.wasPressed()||(!porthub.hub_d_read_value_A(HUB_ADDR[4]))){
-    while(!porthub.hub_d_read_value_A(HUB_ADDR[4])) delay(10);  // チャタリング防止
+  if(M5.BtnB.wasPressed()||(!pbhub.digitalRead(4,0))){
+    while(!pbhub.digitalRead(4,0)) delay(10);  // チャタリング防止
     onoff[sel] = !onoff[sel];
     if(onoff[sel]) base_x.SetEncoderValue(sel+1,0); // エンコーダ・リセット
   }

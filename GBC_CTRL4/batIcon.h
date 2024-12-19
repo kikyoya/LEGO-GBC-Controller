@@ -1,5 +1,14 @@
-// バッテリーアイコン　カラー版 by Kikyoya (C) 2023
+/* バッテリーアイコン　カラー版 by kikyoya (C) 2023-24
+  画面にバッテリーの状態をアイコン(32x16dot)で座標(x,y)に背景色bg(無指定時BLUE)で表示する
+  pushBtIcon(x, y, bg);
+  スプライトを使用するため、あらかじめcreateBtIcon()で作成しておくこと
 
+電源コントローラの有無で挙動はかなり変わるが、基本的には0,25,50,75,100%、通電の有無で絵柄が変わる
+・AXP192:Core2,StickC,CPlus
+・IP5306:Core
+・AXP2101:CoreS3,Core2V1.1
+・なし:CoreInk,CPlus2,DinMeter,Capsule,Cardputer
+*/
 M5Canvas BtIcon(&M5.Display);  // バッテリーアイコン領域スプライトで確保
 #define createBtIcon()  BtIcon.createSprite(32,16)
 
@@ -9,14 +18,14 @@ extern unsigned char NoBtIconImg[];  // バッテリーなしアイコン
 extern unsigned int NoBtIconLen;  // アイコン画像バイト数
 
 void pushBtIcon(int x,int y,uint16_t bg=BLUE){  // 透明PNGの表示にはbgは16bitカラーの必要あり
-  int bt = M5.Power.getBatteryLevel()/25;   // バッテリーレベルのみ取得可(0,25,50,75,100%)
-  int chg = M5.Power.isCharging()?1:0;  
+  int bt = M5.Power.getBatteryLevel();   // バッテリーレベルのみ取得可(0,25,50,75,100%):err:-2
+  int chg = M5.Power.isCharging();//?1:0;  // 0:dischg,1:chg,2:unknown
   BtIcon.fillScreen(bg);    // バックの色
 // バッテリーなし
-  if(M5.Power.getBatteryVoltage()==0){
+  if((M5.Power.getBatteryVoltage()==0)||(bt<0)||(chg>1)){
     BtIcon.drawPng((std::uint8_t*)NoBtIconImg, NoBtIconLen, 0, 0);
   }else{
-    BtIcon.drawPng((std::uint8_t*)BtIconImg[chg][bt], BtIconLen[chg][bt], 0, 0);
+    BtIcon.drawPng((std::uint8_t*)BtIconImg[chg][bt/25], BtIconLen[chg][bt/25], 0, 0);
   }
   BtIcon.pushSprite(x, y);
 }
